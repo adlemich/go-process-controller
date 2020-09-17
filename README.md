@@ -8,10 +8,10 @@ Features
  - Reads from a configuration file about which processes it shall start and monitor
  - Logging with rotating logs, and configurable max file size
  - Launching and monitoring processes
-    x Run and wait for it to finish with timeout
-    x Run without window (hidden)
-    x Redirect stdout and stderr to logiles
-    x allow to restart a process if it terminates with max retries
+    - Run and wait for it to finish with timeout
+    - Run without window (hidden)
+    - Redirect stdout and stderr to logiles
+    - allow to restart a process if it terminates with max retries
 
 
 
