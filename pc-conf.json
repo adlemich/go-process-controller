@@ -1,0 +1,33 @@
+{
+    "Logging": {
+        "LogsFolder": "./logs",
+        "LogFileSizeMB": 20,
+        "LogDebugEnabled": true
+    },
+    "Tasks": [
+        {
+            "Name": "Notepad",
+            "Path": "notepad.exe",
+            "Args": [
+                "notepad.exe",
+                "myfile.txt"
+            ],
+            "StartDelayS": 0,
+            "MaxRestarts": 3,
+            "WaitForExitTimeoutS": 0,
+            "HideWindow": false
+        },
+        {
+            "Name": "Paint",
+            "Path": "mspaint.exe",
+            "Args": [
+                "mspaint.exe",
+                ""
+            ],
+            "StartDelayS": 5,
+            "MaxRestarts": 0,
+            "WaitForExitTimeoutS": 0,
+            "HideWindow": true
+        }
+    ]
+}
