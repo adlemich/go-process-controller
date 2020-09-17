@@ -22,7 +22,7 @@ func initProg() {
 // const strings
 const (
 	GPCVersion = "0.2"
-	GPCAuthor  = "Michael Adler"
+	GPCAuthor  = "adlemich"
 	// Default config file
 	GPCDefConfigFile = "./pc-conf.json"
 )
