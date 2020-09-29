@@ -9,12 +9,14 @@ import (
 //ProcessConfig is the in-memory representation of the configuration file part of process
 type ProcessConfig struct {
 	Name                string   // Name for the process to run
-	Path                string   // Exact path to executable
-	Args                []string // Arguments passed to the executable
+	StartPath           string   // Exact path to executable
+	StartArgs           []string // Arguments passed to the executable
 	StartDelayS         uint32   // zero => no start delay
 	MaxRestarts         uint32   // zero => do not automatically restart
 	WaitForExitTimeoutS uint32   // zero => no waiting for application to end. If specified, the process will be terminated when it exeeds the timeout
 	HideWindow          bool     // true hides the window, false will show it
+	StopPath            string   // Exact path to executable
+	StopArgs            []string // Arguments passed to the executable
 }
 
 //ConfigData is the in-memory representation of the configuration file
@@ -73,20 +75,24 @@ func WriteDefaultConfigFile(sConfigFilePath string) {
 	p2 := ProcessConfig{}
 
 	p1.Name = "Notepad"
-	p1.Path = "notepad.exe"
-	p1.Args = []string{"notepad.exe", "myfile.txt"}
+	p1.StartPath = "notepad.exe"
+	p1.StartArgs = []string{"notepad.exe", "myfile.txt"}
 	p1.StartDelayS = 0
 	p1.MaxRestarts = 3
 	p1.WaitForExitTimeoutS = 0
 	p1.HideWindow = false
+	p1.StopPath = ""
+	p1.StopArgs = []string{"", ""}
 
 	p2.Name = "Paint"
-	p2.Path = "mspaint.exe"
-	p2.Args = []string{"mspaint.exe", ""}
+	p2.StartPath = "mspaint.exe"
+	p2.StartArgs = []string{"mspaint.exe", ""}
 	p2.StartDelayS = 5
 	p2.MaxRestarts = 0
 	p2.WaitForExitTimeoutS = 0
 	p2.HideWindow = true
+	p2.StopPath = ""
+	p2.StopArgs = []string{"", ""}
 
 	tDefaultConf.Tasks = make([]ProcessConfig, 0)
 	tDefaultConf.Tasks = append(tDefaultConf.Tasks, p1)

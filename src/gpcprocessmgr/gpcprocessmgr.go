@@ -48,11 +48,25 @@ func ShutdownAll() {
 			// Process has exited
 			gpclogging.Debug("Process <%s>, PID=<%d> has exited. Nothing to do.", procName, runtimeData.procStatus.pid)
 		} else {
-			gpclogging.Info("Will now try to kill Process <%s>, PID=<%d>.", procName, runtimeData.procStatus.pid)
-			// Process is still active - send termination signal
-			errKill := killProcess(runtimeData.procCmd)
-			if errKill != nil {
-				gpclogging.Error("Process <%s>, PID=<%d> could not be killed!! <%s>", procName, runtimeData.procStatus.pid, errKill.Error())
+			// Try to stop process via Stop Command
+			if len(runtimeData.procConfig.StopPath) > 0 {
+				gpclogging.Debug("Process <%s>, PID=<%d> is still active and a stop command is defined, try to stop it via command.", procName, runtimeData.procStatus.pid)
+				tryStopCommand(runtimeData)
+			}
+
+			// CHECK AGAIN
+			err := checkProcessRunning(runtimeData.procStatus.pid)
+			if err != nil {
+				// Process has exited
+				gpclogging.Debug("Process <%s>, PID=<%d> has exited after running stop command.", procName, runtimeData.procStatus.pid)
+			} else {
+
+				gpclogging.Info("Will now try to kill Process <%s>, PID=<%d>.", procName, runtimeData.procStatus.pid)
+				// Process is still active - send termination signal
+				errKill := killProcess(runtimeData.procCmd)
+				if errKill != nil {
+					gpclogging.Error("Process <%s>, PID=<%d> could not be killed!! <%s>", procName, runtimeData.procStatus.pid, errKill.Error())
+				}
 			}
 		}
 
@@ -75,9 +89,9 @@ func StartProcessesFromConfig(configData *gpcconfig.ConfigData, shutdownWaitGrou
 	gRuntimeDatatMux.Lock()
 	gProcRuntimeData = make(map[string]*GPCProcRuntimeData)
 	for configIndex := range configData.Tasks {
-		gpclogging.Debug("Building runtime config at index <%d>: ProcPath =<%s>.", configIndex, configData.Tasks[configIndex].Path)
+		gpclogging.Debug("Building runtime config at index <%d>: ProcPath =<%s>.", configIndex, configData.Tasks[configIndex].StartPath)
 		gProcRuntimeData[configData.Tasks[configIndex].Name] = NewProcRuntimeData(&configData.Tasks[configIndex])
-		gpclogging.Debug("Config check for prog <%s>: ProcPath =<%s>.", gProcRuntimeData[configData.Tasks[configIndex].Name].procConfig.Name, gProcRuntimeData[configData.Tasks[configIndex].Name].procConfig.Path)
+		gpclogging.Debug("Config check for prog <%s>: ProcPath =<%s>.", gProcRuntimeData[configData.Tasks[configIndex].Name].procConfig.Name, gProcRuntimeData[configData.Tasks[configIndex].Name].procConfig.StartPath)
 	}
 	gRuntimeDatatMux.Unlock()
 
@@ -210,7 +224,7 @@ func launchProcess(procName string) {
 	gpclogging.Info("Will now try to launch process <%s>.", procName)
 
 	// Start process - fire and forget
-	gProcRuntimeData[procName].procCmd = exec.Command(gProcRuntimeData[procName].procConfig.Path)
+	gProcRuntimeData[procName].procCmd = exec.Command(gProcRuntimeData[procName].procConfig.StartPath)
 	doProcessSettings(gProcRuntimeData[procName])
 
 	err := gProcRuntimeData[procName].procCmd.Start()
@@ -251,7 +265,7 @@ func launchProcessAndWait(procName string) {
 	progContext, cancel := context.WithTimeout(context.Background(), timeoutDur)
 	defer cancel()
 
-	gProcRuntimeData[procName].procCmd = exec.CommandContext(progContext, gProcRuntimeData[procName].procConfig.Path)
+	gProcRuntimeData[procName].procCmd = exec.CommandContext(progContext, gProcRuntimeData[procName].procConfig.StartPath)
 	doProcessSettings(gProcRuntimeData[procName])
 
 	err := gProcRuntimeData[procName].procCmd.Run()
@@ -261,17 +275,17 @@ func launchProcessAndWait(procName string) {
 		switch err.(type) {
 		default:
 			// STARTUP ERROR
-			gpclogging.Error("Could not run process <%s>, Error message is: %s", gProcRuntimeData[procName].procConfig.Path, err.Error())
+			gpclogging.Error("Could not run process <%s>, Error message is: %s", gProcRuntimeData[procName].procConfig.StartPath, err.Error())
 			gProcRuntimeData[procName].procStatus.error = true
 		case *exec.ExitError:
 			// TIMEOUT
 			gpclogging.Warn("Running process <%s> OK but it was termined after configured timeout! Exit code was <%d>",
-				gProcRuntimeData[procName].procConfig.Path, gProcRuntimeData[procName].procCmd.ProcessState.ExitCode())
+				gProcRuntimeData[procName].procConfig.StartPath, gProcRuntimeData[procName].procCmd.ProcessState.ExitCode())
 			gProcRuntimeData[procName].procStatus.timeout = true
 			gProcRuntimeData[procName].procStatus.done = true
 		}
 	} else {
-		gpclogging.Info("Running process <%s> OK! Exit code was <%d>", gProcRuntimeData[procName].procConfig.Path,
+		gpclogging.Info("Running process <%s> OK! Exit code was <%d>", gProcRuntimeData[procName].procConfig.StartPath,
 			gProcRuntimeData[procName].procCmd.ProcessState.ExitCode())
 		gProcRuntimeData[procName].procStatus.done = true
 	}
@@ -289,6 +303,7 @@ func doProcessSettings(proc *GPCProcRuntimeData) {
 	// Setting input, output and error streams
 	proc.procCmd.Stdin = nil
 
+	gpclogging.Debug("Process <%s>, Redirecting standard out and error to logfiles.", proc.procConfig.Name)
 	logOut, err := gpclogging.GetLogFileForProcess(proc.procConfig.Name)
 	if err != nil {
 		gpclogging.Error("Could not open log file for process <%s> with error <%s>", proc.procConfig.Name, err.Error())
@@ -307,6 +322,12 @@ func doProcessSettings(proc *GPCProcRuntimeData) {
 	} else {
 		gpclogging.Debug("Process <%s>, HideWindow disabled, setting SysProcAttributes.", proc.procConfig.Name)
 		sysProcSettings.HideWindow = false
+	}
+
+	// Command line parameters
+	for argIndex := range proc.procConfig.StartArgs {
+		gpclogging.Debug("Process <%s>, Adding command line argument to execution config: <%s>", proc.procConfig.Name, proc.procConfig.StartArgs[argIndex])
+		proc.procCmd.Args = append(proc.procCmd.Args, proc.procConfig.StartArgs[argIndex])
 	}
 
 	proc.procCmd.SysProcAttr = &sysProcSettings
@@ -329,4 +350,39 @@ func killProcess(proc *exec.Cmd) error {
 	gpclogging.Debug("Leaving KillProcess()")
 
 	return err
+}
+
+//tryStopCommand will try to stop the given process via a command
+//-------------------------------------------------------------------
+func tryStopCommand(proc *GPCProcRuntimeData) {
+	gpclogging.Debug("Entering tryStopCommand()")
+
+	gpclogging.Info("Will now try to stop process <%s>.", proc.procConfig.Name)
+
+	// Start process - fire and forget
+	sysProcSettings := syscall.SysProcAttr{}
+	procCmd := exec.Command(proc.procConfig.StopPath)
+
+	sysProcSettings.HideWindow = true
+
+	// Command line parameters
+	for argIndex := range proc.procConfig.StopArgs {
+		gpclogging.Debug("Process <%s>, Adding command line argument to execution config: <%s>", proc.procConfig.Name, proc.procConfig.StopArgs[argIndex])
+		procCmd.Args = append(proc.procCmd.Args, proc.procConfig.StopArgs[argIndex])
+	}
+
+	procCmd.SysProcAttr = &sysProcSettings
+
+	err := procCmd.Start()
+
+	if err != nil {
+		gpclogging.Error("Could not start process <%s>, Error message is <%s>", proc.procConfig.Name, err.Error())
+	} else {
+		gpclogging.Info("Starting process <%s> OK!", proc.procConfig.Name)
+	}
+	procCmd.Process.Release()
+
+	// Wait a moment for the process to take effect
+	time.Sleep(500 * time.Millisecond)
+	gpclogging.Debug("Leaving tryStopCommand()")
 }
